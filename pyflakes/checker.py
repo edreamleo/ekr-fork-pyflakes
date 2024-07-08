@@ -823,7 +823,7 @@ class Checker:
         with self.in_scope(scope_tp):
             for builtin in self.builtIns:
                 self.addBinding(None, Builtin(builtin))
-            self.handleChildren(tree)
+            self.visit(tree)
             self._run_deferred()
 
         self.checkDeadScopes()
@@ -1150,22 +1150,6 @@ class Checker:
                     self.handleNode(param, node)
             yield
 
-    #@+node:ekr.20240702085302.104: *4* Checker._unknown_handler (not used)
-    def _unknown_handler(self, node):
-        # this environment variable configures whether to error on unknown
-        # ast types.
-        #
-        # this is silent by default but the error is enabled for the pyflakes
-        # testsuite.
-        #
-        # this allows new syntax to be added to python without *requiring*
-        # changes from the pyflakes side.  but will still produce an error
-        # in the pyflakes testsuite (so more specific handling can be added if
-        # needed).
-        if os.environ.get('PYFLAKES_ERROR_UNKNOWN'):
-            raise NotImplementedError(f'Unexpected type: {type(node)}')
-        self.handleChildren(node)
-
     #@+node:ekr.20240702085302.122: *4* Checker.handle_annotation_always_deferred
     def handle_annotation_always_deferred(self, annotation, parent):
         fn = in_annotation(Checker.handleNode)
@@ -1192,7 +1176,7 @@ class Checker:
         else:
             self.handleNode(annotation, node)
 
-    #@+node:ekr.20240702085302.112: *4* Checker.visit (handleChildren) & synonyms
+    #@+node:ekr.20240702085302.112: *4* Checker.visit & synonyms
     def visit(self, node):
         """
         Visit all of node's children in no particular order.
@@ -1208,25 +1192,6 @@ class Checker:
                         self.handleNode(item, node)
             elif isinstance(child, ast.AST):
                 self.handleNode(child, node)
-
-    handleChildren = visit
-        
-    # EKR: These would not be necessary except for unit tests.
-
-    if 0:
-        # "stmt" type nodes.
-        AsyncWith = Delete = Expr = FormattedValue = keyword = handleChildren
-        Module = While = With = withitem = handleChildren
-
-        # "expr" type nodes
-        Attribute = BoolOp = NameConstant = Set = Starred = UnaryOp = handleChildren
-
-        # "match" type nodes.
-        Match = match_case = MatchClass = MatchOr = handleChildren
-        MatchSequence = MatchSingleton = MatchValue = handleChildren
-
-        # "slice" type nodes.
-        ExtSlice = Index = Slice = handleChildren
     #@+node:ekr.20240702085302.120: *4* Checker.handleDoctests
     _getDoctestExamples = doctest.DocTestParser().get_examples
 
@@ -1258,7 +1223,7 @@ class Checker:
                 else:
                     self.offset = (node_offset[0] + node_lineno + example.lineno,
                                    node_offset[1] + example.indent + 4)
-                    self.handleChildren(tree)
+                    self.visit(tree)
                     self.offset = node_offset
         self.scopeStack = saved_stack
 
@@ -1512,7 +1477,7 @@ class Checker:
     def Assert(self, node):
         if isinstance(node.test, ast.Tuple) and node.test.elts != []:
             self.report(messages.AssertTuple, node)
-        self.handleChildren(node)
+        self.visit(node)
 
     #@+node:ekr.20240704151835.1: *4* Checker.Assign
     def Assign(self, node):
@@ -1533,7 +1498,7 @@ class Checker:
                 isinstance(node.left.value, str)
         ):
             self._handle_percent_format(node)
-        self.handleChildren(node)
+        self.visit(node)
 
     #@+node:ekr.20240702085302.128: *5* Checker._handle_percent_format
     def _handle_percent_format(self, node):
@@ -1882,7 +1847,7 @@ class Checker:
                 self.report(messages.IsLiteral, node)
             left = right
 
-        self.handleChildren(node)
+        self.visit(node)
 
     #@+node:ekr.20240705064837.1: *4* Checker.Comprehension
     def comprehension(self, node):
@@ -1958,12 +1923,12 @@ class Checker:
                             key_node,
                             key,
                         )
-        self.handleChildren(node)
+        self.visit(node)
 
     #@+node:ekr.20240702085302.153: *4* Checker.ExceptHandler
     def ExceptHandler(self, node):
         if node.name is None:
-            self.handleChildren(node)
+            self.visit(node)
             return
 
         # If the name already exists in the scope, modify state of existing
@@ -1983,7 +1948,7 @@ class Checker:
             prev_definition = None
 
         self.handleNodeStore(node)
-        self.handleChildren(node)
+        self.visit(node)
 
         # See discussion on https://github.com/PyCQA/pyflakes/pull/59
 
@@ -2082,7 +2047,7 @@ class Checker:
     def If(self, node):
         if isinstance(node.test, ast.Tuple) and node.test.elts != []:
             self.report(messages.IfTuple, node)
-        self.handleChildren(node)
+        self.visit(node)
 
     IfExp = If
 
@@ -2157,7 +2122,7 @@ class Checker:
 
         self._in_fstring, orig = True, self._in_fstring
         try:
-            self.handleChildren(node)
+            self.visit(node)
         finally:
             self._in_fstring = orig
 
@@ -2209,7 +2174,7 @@ class Checker:
     #@+node:ekr.20240702085302.156: *4* Checker.Match* & _match_target
     def _match_target(self, node):
         self.handleNodeStore(node)
-        self.handleChildren(node)
+        self.visit(node)
 
     MatchAs = MatchMapping = MatchStar = _match_target
 
@@ -2243,7 +2208,7 @@ class Checker:
         self.handleFields(node, ('value', 'target'))
     #@+node:ekr.20240702085302.131: *4* Checker.Raise
     def Raise(self, node):
-        self.handleChildren(node)
+        self.visit(node)
 
         arg = node.exc
 
@@ -2357,7 +2322,7 @@ class Checker:
                     star_loc = i
             if star_loc >= 1 << 8 or len(node.elts) - star_loc - 1 >= 1 << 24:
                 self.report(messages.TooManyExpressionsInStarredAssignment, node)
-        self.handleChildren(node)
+        self.visit(node)
 
     List = Tuple
 
